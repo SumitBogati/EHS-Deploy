@@ -19,6 +19,10 @@ app.use(express.json());
 app.use(morgan('dev'));
 app.use(cors());
 
+app.use(cors({
+  origin: 'https://your-frontend-site.netlify.app'
+}));
+
 // Swagger setup
 const swaggerOptions = {
   definition: {
