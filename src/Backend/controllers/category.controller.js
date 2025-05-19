@@ -2,8 +2,14 @@ const Service = require('../models/service.model');
 const Category = require('../models/category.model');
 const Booking = require('../models/booking.model');
 const Staff = require('../models/staff.model');
-const fs = require('fs');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
+
+// Configure Cloudinary (optional if already configured in upload.js)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // Add Category
 exports.addCategory = async (req, res) => {
@@ -35,16 +41,16 @@ exports.addCategory = async (req, res) => {
     // Capitalize the first letter of the trimmed name
     const capitalizedName = name.trim().charAt(0).toUpperCase() + name.trim().slice(1);
 
-    // Save the category with the capitalized name and image path
+    // Save the category with the capitalized name and Cloudinary image URL
     const category = new Category({
       name: capitalizedName,
-      image: req.file.path,
+      image: req.file.path, // Cloudinary URL
     });
 
     await category.save();
     res.status(201).json({ message: 'Category added successfully', category });
   } catch (error) {
-    console.error(error);
+    console.error('Error adding category:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -66,7 +72,7 @@ exports.updateCategory = async (req, res) => {
     }
 
     // If the category name is being updated
-    if (name && name.trim() !== category.name) {
+    if (name && name.trim !== category.name) {
       // Validate name: not empty, not whitespace-only
       if (!name || name.trim().length === 0) {
         return res.status(400).json({ error: 'Category name is required' });
@@ -94,21 +100,19 @@ exports.updateCategory = async (req, res) => {
     }
 
     if (req.file) {
-      const oldImagePath = category.image;
-      if (oldImagePath) {
-        const fullOldImagePath = path.join(__dirname, '../', oldImagePath);
-        if (fs.existsSync(fullOldImagePath)) {
-          fs.unlinkSync(fullOldImagePath); // Delete the old image
-        }
+      // Delete the old image from Cloudinary (if it exists)
+      if (category.image) {
+        const publicId = category.image.split('/').pop().split('.')[0]; // Extract public_id from URL
+        await cloudinary.uploader.destroy(`categories/${publicId}`);
       }
-      category.image = req.file.path; // Update with the new image path
+      category.image = req.file.path; // Update with the new Cloudinary URL
     }
 
     // Save the updated category
     await category.save();
     res.status(200).json({ message: 'Category updated successfully', category });
   } catch (error) {
-    console.error(error);
+    console.error('Error updating category:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -116,7 +120,7 @@ exports.updateCategory = async (req, res) => {
 // Delete Category
 exports.deleteCategory = async (req, res) => {
   try {
-    //Check Role
+    // Check Role
     if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Unauthorized. Only Admin can perform this action' });
     }
@@ -155,15 +159,10 @@ exports.deleteCategory = async (req, res) => {
       }
     );
 
-    // Delete the image from the server
-    const imagePath = category.image;
-    if (imagePath) {
-      const fullImagePath = path.join(__dirname, '../', imagePath);
-      if (fs.existsSync(fullImagePath)) {
-        fs.unlinkSync(fullImagePath);
-      } else {
-        console.error(`Image not found at ${fullImagePath}`);
-      }
+    // Delete the image from Cloudinary (if it exists)
+    if (category.image) {
+      const publicId = category.image.split('/').pop().split('.')[0]; // Extract public_id from URL
+      await cloudinary.uploader.destroy(`categories/${publicId}`);
     }
 
     // Delete the category itself
@@ -179,7 +178,6 @@ exports.deleteCategory = async (req, res) => {
 // Get All Categories
 exports.getCategories = async (req, res) => {
   try {
-
     const categories = await Category.find();
 
     // For each category, count the number of services and add to the category
@@ -193,7 +191,7 @@ exports.getCategories = async (req, res) => {
 
     res.status(200).json(categoriesWithServiceCount);
   } catch (error) {
-    console.error(error);
+    console.error('Error getting categories:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -210,7 +208,7 @@ exports.getCategory = async (req, res) => {
 
     res.status(200).json(category);
   } catch (error) {
-    console.error(error);
+    console.error('Error getting category:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

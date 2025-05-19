@@ -1,7 +1,10 @@
 const express = require('express');
 const { addCategory, updateCategory, deleteCategory, getCategories, getCategory } = require('../controllers/category.controller');
 const { jwtAuthMiddleware } = require("../jwt");
-const upload = require('../upload')('category');
+const createMulterUpload = require('../upload');
+
+// Initialize upload middleware for category
+const upload = createMulterUpload('category');
 
 const router = express.Router();
 
