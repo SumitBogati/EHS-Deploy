@@ -17,10 +17,7 @@ const app = express();
 // Middleware for parsing JSON requests and enabling CORS
 app.use(express.json());
 app.use(morgan('dev'));
-
-app.use(cors({
-  origin: 'https://cosmic-sherbet-b2f82f.netlify.app/'
-}));
+app.use(cors());
 
 
 // Swagger setup
