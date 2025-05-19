@@ -17,11 +17,11 @@ const app = express();
 // Middleware for parsing JSON requests and enabling CORS
 app.use(express.json());
 app.use(morgan('dev'));
-app.use(cors());
 
 app.use(cors({
-  origin: 'https://your-frontend-site.netlify.app'
+  origin: 'https://polite-ganache-3faf6b.netlify.app'
 }));
+
 
 // Swagger setup
 const swaggerOptions = {
