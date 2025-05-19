@@ -1,5 +1,6 @@
 const express = require('express');
 const { addStaff, updateStaff, updateStaffPassword, resetStaffPassword, deleteStaff, getAllStaff, getStaffById } = require('../controllers/staff.controller');
+const { jwtAuthMiddleware } = require('../jwt'); // Import JWT middleware
 const upload = require('../upload')('staff');
 
 const router = express.Router();
@@ -48,6 +49,8 @@ router.get('/staff/:id', getStaffById);
  *     tags:
  *       - Staff
  *     summary: Add a new staff member
+ *     security:
+ *       - bearerAuth: [] # Require JWT token
  *     requestBody:
  *       required: true
  *       content:
@@ -64,9 +67,6 @@ router.get('/staff/:id', getStaffById);
  *               phone:
  *                 type: string
  *                 description: Phone number of the staff (should start with 97 or 98 and 10 digits long)
- *               email:
- *                 type: string
- *                 description: Email of the staff
  *               image:
  *                 type: string
  *                 format: binary
@@ -79,8 +79,12 @@ router.get('/staff/:id', getStaffById);
  *         description: Staff added successfully
  *       400:
  *         description: Invalid input or duplicate phone number
+ *       401:
+ *         description: Unauthorized, invalid or missing token
+ *       403:
+ *         description: Forbidden, user is not an admin
  */
-router.post('/add-staff', upload, addStaff);
+router.post('/add-staff', jwtAuthMiddleware, upload, addStaff);
 
 /**
  * @swagger
@@ -89,6 +93,8 @@ router.post('/add-staff', upload, addStaff);
  *     tags:
  *       - Staff
  *     summary: Update staff details
+ *     security:
+ *       - bearerAuth: [] # Require JWT token
  *     parameters:
  *       - in: path
  *         name: id
@@ -122,10 +128,14 @@ router.post('/add-staff', upload, addStaff);
  *         description: Staff updated successfully
  *       400:
  *         description: Invalid phone number or staff not found
+ *       401:
+ *         description: Unauthorized, invalid or missing token
+ *       403:
+ *         description: Forbidden, user is not an admin
  *       404:
  *         description: Staff not found
  */
-router.put('/update-staff/:id', upload, updateStaff);
+router.put('/update-staff/:id', jwtAuthMiddleware, upload, updateStaff);
 
 /**
  * @swagger
@@ -182,7 +192,9 @@ router.post('/update-staff-password', updateStaffPassword);
  *     tags:
  *       - Staff
  *     summary: Reset staff password to default
- *     description: Resets the password of a staff member to the default password (Staff@123) based oner ID.
+ *     description: Resets the password of a staff member to the default password (Staff@123) based on their ID.
+ *     security:
+ *       - bearerAuth: [] # Require JWT token
  *     parameters:
  *       - in: path
  *         name: id
@@ -193,12 +205,16 @@ router.post('/update-staff-password', updateStaffPassword);
  *     responses:
  *       200:
  *         description: Password reset to default successfully
+ *       401:
+ *         description: Unauthorized, invalid or missing token
+ *       403:
+ *         description: Forbidden, user is not an admin
  *       404:
  *         description: Staff not found
  *       500:
  *         description: Server error
  */
-router.post('/reset-staff-password/:id', resetStaffPassword);
+router.post('/reset-staff-password/:id', jwtAuthMiddleware, resetStaffPassword);
 
 /**
  * @swagger
@@ -207,6 +223,8 @@ router.post('/reset-staff-password/:id', resetStaffPassword);
  *     tags:
  *       - Staff
  *     summary: Delete a staff member
+ *     security:
+ *       - bearerAuth: [] # Require JWT token
  *     parameters:
  *       - in: path
  *         name: id
@@ -215,9 +233,13 @@ router.post('/reset-staff-password/:id', resetStaffPassword);
  *     responses:
  *       200:
  *         description: Staff deleted successfully
+ *       401:
+ *         description: Unauthorized, invalid or missing token
+ *       403:
+ *         description: Forbidden, user is not an admin
  *       404:
  *         description: Staff not found
  */
-router.delete('/delete-staff/:id', deleteStaff);
+router.delete('/delete-staff/:id', jwtAuthMiddleware, deleteStaff);
 
 module.exports = router;

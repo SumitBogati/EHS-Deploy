@@ -2,8 +2,14 @@ const Service = require('../models/service.model');
 const Category = require('../models/category.model');
 const Booking = require('../models/booking.model');
 const Payment = require('../models/payment.model');
-const fs = require('fs');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
+
+// Configure Cloudinary (optional if already configured in upload.js)
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // Add Service
 exports.addService = async (req, res) => {
@@ -17,7 +23,7 @@ exports.addService = async (req, res) => {
 
     // Validate inputs
     if (!name || name.trim().length === 0) {
-      return res.status(400).json({ error: 'Service Name Required' });
+      return res.status(400).json({ error: 'Service name is required' });
     }
     if (!category || !price || !description) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -40,7 +46,7 @@ exports.addService = async (req, res) => {
       category,
     });
     if (existingService) {
-      return res.status(400).json({ error: 'Service name already exists for this category' });
+      return res.status(409).json({ error: 'Service name already exists for this category' });
     }
 
     // Check if the category name exists
@@ -61,13 +67,13 @@ exports.addService = async (req, res) => {
       category,
       price: parsedPrice,
       description,
-      image: req.file.path,
+      image: req.file.path, // Cloudinary URL
     });
 
     await service.save();
-    res.status(201).json({ message: 'Service added successfully', service });
+    res.status(201).json({ message: 'Service added successfully'});
   } catch (error) {
-    console.error(error);
+    console.error('Error adding service:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -75,57 +81,47 @@ exports.addService = async (req, res) => {
 // Get Top 3 Most Booked Services
 exports.getTopBookedServices = async (req, res) => {
   try {
-    // Aggregate bookings to count the number of bookings for each service
     const topServices = await Booking.aggregate([
-      // Group by service and count the number of bookings
       {
         $group: {
-          _id: "$service",
-          count: { $sum: 1 }
-        }
+          _id: '$service',
+          count: { $sum: 1 },
+        },
       },
-      // Join with the services collection to retrieve service details
       {
         $lookup: {
-          from: 'Services',
+          from: 'services', // Ensure collection name matches your MongoDB setup
           localField: '_id',
           foreignField: '_id',
-          as: 'serviceDetails'
-        }
+          as: 'serviceDetails',
+        },
       },
-      // Unwind the serviceDetails array to flatten the data
       {
-        $unwind: "$serviceDetails"
+        $unwind: '$serviceDetails',
       },
-      // Project only the required fields: service ID, service name, image, and booking count
       {
         $project: {
-          serviceId: "$serviceDetails._id",
-          name: "$serviceDetails.name",
-          image: "$serviceDetails.image",
-          count: 1
-        }
+          serviceId: '$serviceDetails._id',
+          name: '$serviceDetails.name',
+          image: '$serviceDetails.image',
+          count: 1,
+        },
       },
-      // Sort the results by booking count in descending order (most booked services first)
       {
-        $sort: { count: -1 }
+        $sort: { count: -1 },
       },
-      // Limit the results to the top 3 most booked services
       {
-        $limit: 3
-      }
+        $limit: 3,
+      },
     ]);
 
-    // If no top services are found, return a 404 response with a message
     if (!topServices || topServices.length === 0) {
-      return res.status(404).json({ message: 'No bookings found for services.' });
+      return res.status(404).json({ message: 'No bookings found for services' });
     }
 
-    // Return the top 3 most booked services as a response
     res.status(200).json(topServices);
   } catch (error) {
-    // Handle any errors that occur during the aggregation
-    console.error(error);
+    console.error('Error getting top booked services:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -149,18 +145,16 @@ exports.updateService = async (req, res) => {
     // Validate and update name if provided
     if (name && name.trim() !== service.name) {
       if (!name || name.trim().length === 0) {
-        return res.status(400).json({ error: 'Service Name Required' });
+        return res.status(400).json({ error: 'Service name is required' });
       }
-      // Check if new name already exists for the given category (case-insensitive)
       const existingService = await Service.findOne({
         name: { $regex: `^${name.trim()}$`, $options: 'i' },
         category: category || service.category,
-        _id: { $ne: id } // Exclude the current service
+        _id: { $ne: id },
       });
       if (existingService) {
-        return res.status(400).json({ error: 'Service name already exists for this category' });
+        return res.status(409).json({ error: 'Service name already exists for this category' });
       }
-      // Capitalize the first letter of the trimmed name
       service.name = name.trim().charAt(0).toUpperCase() + name.trim().slice(1);
     }
 
@@ -174,19 +168,24 @@ exports.updateService = async (req, res) => {
         return res.status(400).json({ error: 'Invalid category name' });
       }
       service.category = category;
+
+      // Update related bookings with the new category
+      await Booking.updateMany(
+        { service: id },
+        { $set: { category: category } }
+      );
     }
 
     // Update price if provided
     if (price !== undefined) {
       const parsedPrice = parseFloat(price);
-      if (isNaN(parsedPrice) || parsedPrice <= 0) {
-        return res.status(400).json({ error: 'Price must be a positive number' });
+      if (isNaN(parsedPrice) || parsedPrice < 0) {
+        return res.status(400).json({ error: 'Price must be a valid non-negative number' });
+      }
+      if (parsedPrice < 500) {
+        return res.status(400).json({ error: 'Price must be at least 500' });
       }
       service.price = parsedPrice;
-    }
-
-    if (price < 500) {
-      return res.status(400).json({ error: 'Price must be at least 500' });
     }
 
     // Update description if provided
@@ -199,21 +198,17 @@ exports.updateService = async (req, res) => {
 
     // Update image if provided
     if (req.file) {
-      const oldImagePath = service.image;
-      if (oldImagePath) {
-        const fullOldImagePath = path.join(__dirname, '../', oldImagePath);
-        if (fs.existsSync(fullOldImagePath)) {
-          fs.unlinkSync(fullOldImagePath); // Delete the old image
-        }
+      if (service.image) {
+        const publicId = service.image.split('/').pop().split('.')[0]; // Extract public_id
+        await cloudinary.uploader.destroy(`services/${publicId}`);
       }
-      service.image = req.file.path; // Update with the new image path
+      service.image = req.file.path; // Update with new Cloudinary URL
     }
 
-    // Save the updated service
     await service.save();
     res.status(200).json({ message: 'Service updated successfully', service });
   } catch (error) {
-    console.error(error);
+    console.error('Error updating service:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -233,33 +228,40 @@ exports.deleteService = async (req, res) => {
       return res.status(404).json({ error: 'Service not found' });
     }
 
-    // Delete the image
-    const imagePath = service.image;
-    if (imagePath) {
-      const fullImagePath = path.join(__dirname, '../', imagePath);
-      if (fs.existsSync(fullImagePath)) {
-        fs.unlinkSync(fullImagePath);
-      }
+    // Delete the image from Cloudinary
+    if (service.image) {
+      const publicId = service.image.split('/').pop().split('.')[0]; // Extract public_id
+      await cloudinary.uploader.destroy(`services/${publicId}`);
     }
 
-    // Delete the service
-    await Service.findByIdAndDelete(id);
-
-    // Update related bookings to reflect service deletion
+    // Update related bookings
     await Booking.updateMany(
       { service: id },
-      { $set: { serviceName: 'Service Deleted' } }
+      {
+        $set: {
+          service: null,
+          serviceName: 'Service Deleted',
+        },
+      }
     );
 
     // Update related payments
     await Payment.updateMany(
       { service: id },
-      { $set: { serviceName: 'Service Deleted' } }
+      {
+        $set: {
+          service: null,
+          serviceName: 'Service Deleted',
+        },
+      }
     );
 
-    res.status(200).json({ message: 'Service deleted and related bookings updated' });
+    // Delete the service
+    await Service.findByIdAndDelete(id);
+
+    res.status(200).json({ message: 'Service deleted successfully' });
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting service:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -270,7 +272,7 @@ exports.getServices = async (req, res) => {
     const services = await Service.find();
     res.status(200).json(services);
   } catch (error) {
-    console.error(error);
+    console.error('Error getting services:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -287,7 +289,7 @@ exports.getService = async (req, res) => {
 
     res.status(200).json(service);
   } catch (error) {
-    console.error(error);
+    console.error('Error getting service:', error);
     res.status(500).json({ error: 'Server error' });
   }
 };

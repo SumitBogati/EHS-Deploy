@@ -1,7 +1,10 @@
 const express = require('express');
 const { addService, updateService, deleteService, getServices, getService, getTopBookedServices } = require('../controllers/service.controller');
-const { jwtAuthMiddleware } = require("../jwt");
-const upload = require('../upload')('service');
+const { jwtAuthMiddleware } = require('../jwt');
+const createMulterUpload = require('../upload');
+
+// Initialize upload middleware for service
+const upload = createMulterUpload('service');
 
 const router = express.Router();
 
@@ -21,6 +24,8 @@ const router = express.Router();
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Service'
+ *       500:
+ *         description: Server error
  */
 router.get('/services', getServices);
 
@@ -35,12 +40,20 @@ router.get('/services', getServices);
  *       - in: path
  *         name: id
  *         required: true
+ *         schema:
+ *           type: string
  *         description: Service ID
  *     responses:
  *       200:
  *         description: Service details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Service'
  *       404:
  *         description: Service not found
+ *       500:
+ *         description: Server error
  */
 router.get('/service/:id', getService);
 
@@ -51,36 +64,59 @@ router.get('/service/:id', getService);
  *     tags:
  *       - Services
  *     summary: Add a new service
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         multipart/form-data:
  *           schema:
  *             type: object
+ *             required:
+ *               - name
+ *               - category
+ *               - price
+ *               - description
+ *               - image
  *             properties:
  *               name:
  *                 type: string
  *                 description: Service name
  *               category:
  *                 type: string
- *                 description: Category name
+ *                 description: Name of an existing category
  *               price:
  *                 type: number
- *                 description: Price of the service in Rs.
+ *                 description: Price of the service in Rs. (minimum 500)
  *               description:
  *                 type: string
  *                 description: Description of the service
  *               image:
  *                 type: string
  *                 format: binary
- *                 description: Image of the service
+ *                 description: Image of the service (JPEG, JPG, or PNG)
  *     responses:
  *       201:
  *         description: Service added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 service:
+ *                   $ref: '#/components/schemas/Service'
  *       400:
- *         description: Invalid input or category not found
+ *         description: Invalid input, missing fields, or invalid category
+ *       403:
+ *         description: Unauthorized, admin access required
+ *       409:
+ *         description: Service name already exists for this category
+ *       500:
+ *         description: Server error
  */
-router.post('/add-service',jwtAuthMiddleware ,upload, addService);
+router.post('/add-service', jwtAuthMiddleware, upload, addService);
 
 /**
  * @swagger
@@ -89,9 +125,9 @@ router.post('/add-service',jwtAuthMiddleware ,upload, addService);
  *     tags:
  *       - Services
  *     summary: Get top 3 most booked services
- *     description: Retrieves the top 3 most booked services based on the number of bookings.
+ *     description: Retrieves the top 3 most booked services based on the number of bookings
  *     responses:
- *       '200':
+ *       200:
  *         description: Successfully retrieved top 3 most booked services
  *         content:
  *           application/json:
@@ -106,12 +142,15 @@ router.post('/add-service',jwtAuthMiddleware ,upload, addService);
  *                   name:
  *                     type: string
  *                     description: Name of the service
+ *                   image:
+ *                     type: string
+ *                     description: URL of the service image
  *                   count:
  *                     type: integer
  *                     description: Number of bookings for the service
- *       '404':
+ *       404:
  *         description: No bookings found for services
- *       '500':
+ *       500:
  *         description: Server error
  */
 router.get('/services/top-booked', getTopBookedServices);
@@ -123,10 +162,14 @@ router.get('/services/top-booked', getTopBookedServices);
  *     tags:
  *       - Services
  *     summary: Update service details
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         schema:
+ *           type: string
  *         description: Service ID
  *     requestBody:
  *       required: false
@@ -137,27 +180,44 @@ router.get('/services/top-booked', getTopBookedServices);
  *             properties:
  *               name:
  *                 type: string
- *                 description: Service name
+ *                 description: Service name (optional)
  *               category:
  *                 type: string
- *                 description: Category name (optional, only required if being updated)
+ *                 description: Name of an existing category (optional)
  *               price:
  *                 type: number
- *                 description: Price of the service in Rs.
+ *                 description: Price of the service in Rs. (minimum 500, optional)
  *               description:
  *                 type: string
- *                 description: Description of the service
+ *                 description: Description of the service (optional)
  *               image:
  *                 type: string
  *                 format: binary
- *                 description: New image of the service (optional)
+ *                 description: New image of the service (JPEG, JPG, or PNG, optional)
  *     responses:
  *       200:
  *         description: Service updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 service:
+ *                   $ref: '#/components/schemas/Service'
+ *       400:
+ *         description: Invalid input, missing required fields, or invalid category
+ *       403:
+ *         description: Unauthorized, admin access required
  *       404:
  *         description: Service not found
+ *       409:
+ *         description: Service name already exists for this category
+ *       500:
+ *         description: Server error
  */
-router.put('/update-service/:id',jwtAuthMiddleware, upload, updateService);
+router.put('/update-service/:id', jwtAuthMiddleware, upload, updateService);
 
 /**
  * @swagger
@@ -166,17 +226,32 @@ router.put('/update-service/:id',jwtAuthMiddleware, upload, updateService);
  *     tags:
  *       - Services
  *     summary: Delete a service
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
+ *         schema:
+ *           type: string
  *         description: Service ID
  *     responses:
  *       200:
  *         description: Service deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Unauthorized, admin access required
  *       404:
  *         description: Service not found
+ *       500:
+ *         description: Server error
  */
-router.delete('/delete-service/:id',jwtAuthMiddleware, deleteService);
+router.delete('/delete-service/:id', jwtAuthMiddleware, deleteService);
 
 module.exports = router;
