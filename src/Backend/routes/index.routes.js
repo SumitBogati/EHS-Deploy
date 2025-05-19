@@ -27,4 +27,8 @@ router.use(userRoutes)
 router.use(dashboardRoutes)
 router.use(passwordRoutes)
 
+router.get('/test', (req, res) => {
+  res.json({ message: 'API is working' });
+});
+
 module.exports = router;
