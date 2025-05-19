@@ -19,7 +19,7 @@ app.use(express.json());
 app.use(morgan('dev'));
 
 app.use(cors({
-  origin: 'https://quiet-truffle-665de4.netlify.app/'
+  origin: 'https://cosmic-sherbet-b2f82f.netlify.app/'
 }));
 
 
